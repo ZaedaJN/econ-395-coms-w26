@@ -1,5 +1,234 @@
-```{r}
+---
+format: pdf
+
+---
+```{r, echo = FALSE, message = FALSE, warning = FALSE}
+#| label: Importing Libraries
+
+library(car)
+library(countrycode)
+library(estimatr)
+library(GDPuc)
+library(ggplot2)
+library(ggpubr)
+library(haven)
+library(kableExtra)
+library(lmtest)
+library(modelsummary)
+library(priceR)
 library(readxl)
-agg_data_7_3 <- read_excel("agg_data_7.3.xlsx")
+library(rstatix)
+library(stargazer)
+library(tidyr)
+library(tidyverse)
+library(tinytable)
+library(tinytex)
+library(writexl)
 ```
+
+```{r, echo = FALSE, message = FALSE, warning = FALSE}
+#| label: Importing Data
+
+agg_data_8 <- read_excel("agg_data_8.xlsx", 
+    col_types = c("text", "text", "numeric", 
+        "numeric", "numeric", "numeric", 
+        "numeric", "numeric", "numeric", 
+        "numeric", "numeric", "numeric", 
+        "numeric", "numeric", "text", "text", 
+        "text", "text", "numeric", "numeric", 
+        "skip", "numeric"))
+
+agg_data_8.1 <- agg_data_8 |>
+  select(
+    #organizing the variables
+    Country.x, ISO3, Year,
+    
+    `Autonomy/ Political Status`,
+    `Metropole/`,
+    `Political System Type`,
+    `Independence Year`,
+    
+    `Area (sq km)`,
+    
+    Population,
+    
+    `Per capita GDP`,
+    `Per capita national income`,
+    `GDP (Constant US$)`,
+
+    `Gini Index`,
+    
+    `Life expectancy at birth (years)`,
+    `Urban Population (%)`,
+    `Total fertility rate (live births per woman)`,
+
+    `Annual population growth rate (%)`,
+    `Crude birth rate (1 000 pop)`,
+    `Crude death rate (1 000 pop)`,
+    `Infant Mortality Rate`,
+
+    CFSI) |>
+  
+  rename(
+    Country = Country.x,
+    Metropole = `Metropole/`,
+    Autonomy = `Autonomy/ Political Status`) |>
+  
+  group_by(Country) |>
+  arrange(Year, .by_group = TRUE) |>
+  mutate(
+    `GDP Growth`  = (`GDP (Constant US$)` / lag(`GDP (Constant US$)`) - 1) * 100) |>
+  ungroup() |>
+  
+  mutate(Autonomy_Metro = paste(Autonomy, Metropole, sep = " / ")) 
+
+
+
+```
+
+```{r, echo = FALSE, message = FALSE, warning = FALSE}
+#| label: Creating Factors
+agg_data_8.1$Autonomy <- as.factor(agg_data_8.1$Autonomy)
+agg_data_8.1$Metropole <- as.factor(agg_data_8.1$Metropole)
+agg_data_8.1$`Political System Type` <- as.factor(agg_data_8.1$`Political System Type`)
+```
+
+```{r, echo = FALSE, message = FALSE, warning = FALSE}
+#H2: Partially autonomous territories will be associated with higher development outcomes than fully sovereign or fully dependence ones.
+
+#Non Sovereign CFSI.
+agg_data_8.1 <- agg_data_8.1 |>
+  mutate(nonsovereign_CFSI = case_when(
+    `Autonomy` == "Dependent / Non Sovereign" &
+      CFSI <= 0.50 ~ "Higher Levels of Formal Sovereignity",
+    
+    `Autonomy` == "Dependent / Non Sovereign" &
+      CFSI >= 0.50 ~ "Lower Levels of Formal Sovereignity"))
+
+table_h2_ai <- datasummary_balance(
+  `GDP (Constant US$)` +
+  `GDP Growth` +
+  `Gini Index` +
+  `Per capita GDP` + 
+  `Per capita national income` ~ nonsovereign_CFSI,  
+  
+  data = agg_data_8.1,
+  dinm_statistic = "p.value", 
+  stars = TRUE, 
+  fmt = fmt_decimal(digits = 1, pdigits = 3),
+  title = "Economic Summary Statistics by CFSI",
+  output = "latex")
+
+print(table_h2_ai)
+
+#Sovereign CFSI
+agg_data_8.1 <- agg_data_8.1 |>
+  mutate(sovereign_CFSI = case_when(
+    `Autonomy` == "Dependent / Non Sovereign" &
+      CFSI <= 0.85 ~ "Higher Levels of Formal Sovereignity",
+    
+    `Autonomy` == "Dependent / Non Sovereign" &
+      CFSI >= 0.85 ~ "Lower Levels of Formal Sovereignity"))
+
+table_h2_aii <- datasummary_balance(
+  `GDP (Constant US$)` +
+  `GDP Growth` +
+  `Gini Index` +
+  `Per capita GDP` + 
+  `Per capita national income` ~ nonsovereign_CFSI,  
+  
+  data = agg_data_8.1,
+  dinm_statistic = "p.value", 
+  stars = TRUE, 
+  fmt = fmt_decimal(digits = 1, pdigits = 3),
+  title = "Economic Summary Statistics by CFSI",
+  output = "latex")
+
+print(table_h2_aii)
+
+#Styles of imperialism.
+agg_data_8.1 <- agg_data_8.1 |>
+  mutate(Imperialism = case_when(
+    `Metropole` == "United Kingdom" |
+      `Metropole` == "Spain " |
+    `Metropole` == "The Netherlands " ~ "Economically Oriented",
+    
+    `Metropole` == "France" ~ "Politically Oriented"))
+
+table_h2_b <- datasummary_balance(
+  `GDP (Constant US$)` +
+  `GDP Growth` +
+  `Gini Index` +
+  `Per capita GDP` + 
+  `Per capita national income` ~ Imperialism,  
+  
+  data = agg_data_8.1,
+  dinm_statistic = "p.value", 
+  stars = TRUE, 
+  fmt = fmt_decimal(digits = 1, pdigits = 3),
+  title = "Economic Summary Statistics by CFSI",
+  output = "latex")
+
+print(table_h2_b)
+
+
+
+
+```
+
+
+```{r}
+#H3: The sovereign territories which gained independence prior to 1970 will have higher levels of HDI than those who gained independence later. 
+
+agg_data_8.1 <- agg_data_8.1 |>
+  mutate(Time = case_when(
+    `Autonomy` == "Independent / Sovereign" &
+      `Independence Year` < 1970 ~ "Earlier",
+    
+    `Autonomy` == "Independent / Sovereign" &
+      `Independence Year` >= 1970 ~ "Later"))
+
+table_h3 <- datasummary_balance(
+  `GDP (Constant US$)` +
+  `GDP Growth` +
+  `Gini Index` +
+  `Per capita GDP` + 
+  `Per capita national income` ~ Time,  
+  
+  data = agg_data_8.1,
+  dinm_statistic = "p.value", 
+  stars = TRUE, 
+  fmt = fmt_decimal(digits = 1, pdigits = 3),
+  title = "Economic Summary Statistics by CFSI",
+  output = "latex")
+
+
+print(table_h3)
+```
+
+
+```{r}
+
+#Finding the mean, SD, t test, pvalue for variables for economic indicators
+
+table1 <- datasummary_balance(
+  `GDP (Constant US$)` +
+  `GDP Growth` +
+  `Gini Index` +
+  `Per capita GDP` + 
+  `Per capita national income` ~ Autonomy,  
+  
+  data = agg_data_8.1,
+  dinm_statistic = "p.value", 
+  stars = TRUE, 
+  fmt = fmt_decimal(digits = 1, pdigits = 3),
+  title = "Economic Summary Statistics by CFSI",
+  output = "latex")
+
+
+print(table1)
+
+```
+
+
 

@@ -1,0 +1,269 @@
+---
+title: "Week 2"
+author: "Zaeda Peter"
+output:
+  pdf_document:
+    extra_dependencies: ["float"]
+  word_document: default
+  html_document: default
+editor_options:
+  chunk_output_type: console
+header-includes:
+  - \usepackage{float}                 
+  - \floatplacement{figure}{H}       
+  - \floatplacement{table}{H}       
+---
+
+
+```{r, echo = FALSE, message = FALSE, warning = FALSE}
+#| label: Importing Libraries
+
+library(car)
+library(countrycode)
+library(estimatr)
+library(GDPuc)
+library(ggplot2)
+library(ggpubr)
+library(haven)
+library(kableExtra)
+library(lmtest)
+library(modelsummary)
+library(priceR)
+library(readxl)
+library(rstatix)
+library(stargazer)
+library(tidyr)
+library(tidyverse)
+library(tinytable)
+library(tinytex)
+library(writexl)
+```
+
+```{r, echo = FALSE, message = FALSE, warning = FALSE}
+#| label: Importing Data
+
+agg_data_8 <- read_excel("agg_data_8.xlsx", 
+    col_types = c("text", "text", "numeric", 
+        "numeric", "numeric", "numeric", 
+        "numeric", "numeric", "numeric", 
+        "numeric", "numeric", "numeric", 
+        "numeric", "numeric", "text", "text", 
+        "text", "text", "numeric", "numeric", 
+        "skip", "numeric"))
+
+agg_data_8.1 <- agg_data_8 |>
+  select(
+    #organizing the variables
+    Country.x, ISO3, Year,
+    
+    `Autonomy/ Political Status`,
+    `Metropole/`,
+    `Political System Type`,
+    `Independence Year`,
+    
+    `Area (sq km)`,
+    
+    Population,
+    
+    `Per capita GDP`,
+    `Per capita national income`,
+    `GDP (Constant US$)`,
+
+    `Gini Index`,
+    
+    `Life expectancy at birth (years)`,
+    `Urban Population (%)`,
+    `Total fertility rate (live births per woman)`,
+
+    `Annual population growth rate (%)`,
+    `Crude birth rate (1 000 pop)`,
+    `Crude death rate (1 000 pop)`,
+    `Infant Mortality Rate`,
+
+    CFSI) |>
+  
+  rename(
+    Country = Country.x,
+    Metropole = `Metropole/`,
+    Autonomy = `Autonomy/ Political Status`) |>
+  
+  group_by(Country) |>
+  arrange(Year, .by_group = TRUE) |>
+  mutate(
+    `GDP Growth`  = (`GDP (Constant US$)` / lag(`GDP (Constant US$)`) - 1) * 100) |>
+  ungroup() |>
+  
+  mutate(Autonomy_Metro = paste(Autonomy, Metropole, sep = " / ")) 
+
+```
+
+```{r, echo = FALSE, message = FALSE, warning = FALSE}
+#| label: Creating Factors
+agg_data_8.1$Autonomy <- as.factor(agg_data_8.1$Autonomy)
+agg_data_8.1$Metropole <- as.factor(agg_data_8.1$Metropole)
+agg_data_8.1$`Political System Type` <- as.factor(agg_data_8.1$`Political System Type`)
+
+```
+
+# Hypotheses
+
+## Hypothesis Two
+
+```{r, echo = FALSE, message = FALSE, warning = FALSE}
+#H2: Partially autonomous territories will be associated with higher development outcomes than fully sovereign or fully dependence ones.
+
+# f. Both territories -> Divide at type of imperialism.
+agg_data_8.1 <- agg_data_8.1 |>
+  mutate(Imperialism = case_when(
+    `Metropole` == "United Kingdom" |
+      `Metropole` == "Spain " |
+    `Metropole` == "The Netherlands " ~ "Economically Oriented",
+    
+    `Metropole` == "France" |
+      `Metropole` == "United States of America"~ "Politically Oriented"))
+
+datasummary_balance(
+  `GDP (Constant US$)` +
+  `GDP Growth` +
+  `Gini Index` +
+  `Per capita GDP` + 
+  `Per capita national income` ~ Imperialism,  
+  
+  data = agg_data_8.1,
+  dinm_statistic = "p.value", 
+  stars = TRUE, 
+  fmt = fmt_decimal(digits = 1, pdigits = 3),
+  output = "kableExtra",
+  title = "Economic Summary Statistics by Imperialism") |>
+  kable_styling( full_width = T,
+                 
+                bootstrap_options = c("striped", "hover"))
+
+# a. Non sovereign territories -> divide at CFSI 0.50
+agg_data_nonsovereign <- agg_data_8.1 |>
+  filter(Autonomy == "Dependent / Non Sovereign") |>
+  mutate(nonsovereign_CFSI = case_when(
+    `Autonomy` == "Dependent / Non Sovereign" &
+      CFSI <= 0.50 ~ "Greater Sovereignity",
+    
+    `Autonomy` == "Dependent / Non Sovereign" &
+      CFSI >= 0.50 ~ "Lesser Sovereignity"))
+
+datasummary_balance(
+  `GDP (Constant US$)` +
+  `GDP Growth` +
+  `Gini Index` +
+  `Per capita GDP` + 
+  `Per capita national income` ~ nonsovereign_CFSI,  
+  
+  data = agg_data_nonsovereign,
+  dinm_statistic = "p.value", 
+  stars = TRUE, 
+  fmt = fmt_decimal(digits = 1, pdigits = 3),
+  output = "kableExtra",
+  title = "Economic Summary Statistics by CFSI for NonSovereign Territories") |>
+  kable_styling( full_width = T,
+                 
+                bootstrap_options = c("striped", "hover"))
+
+# b. Sovereign territories -> divide at CFSI 0.85
+agg_data_sovereign <- agg_data_8.1 |>
+  filter(Autonomy == "Independent / Sovereign") |>
+  mutate(sovereign_CFSI = case_when(
+    `Autonomy` == "Independent / Sovereign" &
+      CFSI <= 0.85 ~ "Greater Sovereignity",
+    
+    `Autonomy` == "Independent / Sovereign" &
+      CFSI >= 0.85 ~ "Lesser Sovereignity"))
+
+datasummary_balance(
+  `GDP (Constant US$)` +
+  `GDP Growth` +
+  `Gini Index` +
+  `Per capita GDP` + 
+  `Per capita national income` ~ sovereign_CFSI,  
+  
+  data = agg_data_sovereign,
+  dinm_statistic = "p.value", 
+  stars = TRUE, 
+  fmt = fmt_decimal(digits = 1, pdigits = 3),
+  output = "kableExtra",
+ title = "Economic Summary Statistics by CFSI for Sovereign Territories") |>
+  kable_styling( full_width = T,
+                 
+                bootstrap_options = c("striped", "hover"))
+
+# d. Non sovereign territories -> Divide at type of imperialism
+datasummary_balance(
+  `GDP (Constant US$)` +
+  `GDP Growth` +
+  `Gini Index` +
+  `Per capita GDP` + 
+  `Per capita national income` ~ Imperialism,  
+  
+  data = agg_data_nonsovereign,
+  dinm_statistic = "p.value", 
+  stars = TRUE, 
+  fmt = fmt_decimal(digits = 1, pdigits = 3),
+  output = "kableExtra",
+ title = "Economic Summary Statistics by Imperialism for NonSovereign Territories") |>
+  kable_styling( full_width = T,
+                 
+                bootstrap_options = c("striped", "hover"))
+
+# e. Sovereign territories -> Divide at type of imperialism
+datasummary_balance(
+  `GDP (Constant US$)` +
+  `GDP Growth` +
+  `Gini Index` +
+  `Per capita GDP` + 
+  `Per capita national income` ~ Imperialism,  
+  
+  data = agg_data_sovereign,
+  dinm_statistic = "p.value", 
+  stars = TRUE, 
+  fmt = fmt_decimal(digits = 1, pdigits = 3),
+  output = "kableExtra",
+ title = "Economic Summary Statistics by Imperialism for Sovereign Territories") |>
+  kable_styling( full_width = T,
+                 
+                bootstrap_options = c("striped", "hover"))
+
+
+```
+
+## Hypothesis Three
+
+```{r, echo = FALSE, message = FALSE, warning = FALSE}
+#H3: The sovereign territories which gained independence prior to 1970 will have higher levels of HDI than those who gained independence later. 
+
+
+# a. Sovereign territories -> Divide year of independence into pre 1970 and post. 
+agg_data_sovereign <- agg_data_sovereign |>
+  mutate(Time = case_when(
+    `Autonomy` == "Independent / Sovereign" &
+      `Independence Year` < 1970 ~ "Earlier",
+    
+    `Autonomy` == "Independent / Sovereign" &
+      `Independence Year` >= 1970 ~ "Later"))
+
+datasummary_balance(
+  `GDP (Constant US$)` +
+  `GDP Growth` +
+  `Gini Index` +
+  `Per capita GDP` + 
+  `Per capita national income` ~ Time,  
+  
+  data = agg_data_sovereign,
+  dinm_statistic = "p.value", 
+  stars = TRUE, 
+  fmt = fmt_decimal(digits = 1, pdigits = 3),
+  output = "kableExtra",
+  title = "Economic Summary Statistics by Year of Independence for Sovereign Territories") |>
+  kable_styling(full_width = T,
+                 
+                bootstrap_options = c("striped", "hover"))
+
+
+
+```
